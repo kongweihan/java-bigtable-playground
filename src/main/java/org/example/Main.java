@@ -2,6 +2,7 @@ import static com.google.cloud.bigtable.data.v2.models.Filters.FILTERS;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.grpc.ChannelPoolSettings;
+import com.google.api.gax.rpc.ServerStream;
 import com.google.cloud.bigtable.data.v2.BigtableDataClient;
 import com.google.cloud.bigtable.data.v2.BigtableDataSettings;
 import com.google.cloud.bigtable.data.v2.models.KeyOffset;
@@ -32,8 +33,8 @@ import java.util.stream.Collectors;
 public class Main {
   private static final File KEY_CACHE_FILE = new File("keys.txt");
 
-  private static final int CONCURRENCY = 32;
-  private static final int TARGET_QPS = 200;
+  private static final int CONCURRENCY = 200;
+  private static final int TARGET_QPS = 10000;
   private static final String PROJECT_ID = "google.com:cloud-bigtable-dev";
   private static final String INSTANCE_ID = "kongwh-df-prod";
   private static final String TABLE_ID = "imported-1kb-row-1t";
@@ -174,6 +175,7 @@ public class Main {
 
     // Fetch a sample of 10 keys per tablet
     for (KeyOffset keyOffset : keyOffsets) {
+      System.out.println("startKey=" +startKey + " endKey="+ keyOffset.getKey());
       semaphore.acquire();
       Query q = Query.create(TABLE_ID)
           .range(startKey, keyOffset.getKey())
@@ -187,6 +189,8 @@ public class Main {
 
           )
           .limit(10);
+
+      startKey = keyOffset.getKey();
 
       // Asynchronously fetch the keys and release the semaphore
       ApiFuture<List<Row>> f = client.readRowsCallable().all().futureCall(q);
@@ -203,6 +207,9 @@ public class Main {
       resultKeys.addAll(
           result.get().stream().map(Row::getKey).collect(Collectors.toList())
       );
+    }
+    for (ByteString key : resultKeys) {
+      System.out.println("key=" + key);
     }
     System.out.println("Done sampling keys in the table");
     return resultKeys;
