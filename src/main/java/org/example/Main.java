@@ -33,11 +33,11 @@ import java.util.stream.Collectors;
 public class Main {
   private static final File KEY_CACHE_FILE = new File("keys.txt");
 
-  private static final int CONCURRENCY = 200;
-  private static final int TARGET_QPS = 10000;
+  private static final int CONCURRENCY = 1000;
+  private static final int TARGET_QPS = 5000;
   private static final String PROJECT_ID = "google.com:cloud-bigtable-dev";
-  private static final String INSTANCE_ID = "kongwh-df-prod";
-  private static final String TABLE_ID = "imported-1kb-row-1t";
+  private static final String INSTANCE_ID = "kongwh-df-tp";
+  private static final String TABLE_ID = "imported-1kb-row-1t-online";
 
   public static void main(String[] args)
       throws IOException, ExecutionException, InterruptedException {
