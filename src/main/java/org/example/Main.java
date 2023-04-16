@@ -4,7 +4,6 @@ import static com.google.cloud.bigtable.data.v2.models.Filters.FILTERS;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.grpc.ChannelPoolSettings;
-import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.api.gax.rpc.ServerStream;
 import com.google.cloud.bigtable.data.v2.BigtableDataClient;
 import com.google.cloud.bigtable.data.v2.BigtableDataSettings;
@@ -38,18 +37,19 @@ public class Main {
   private static final File KEY_CACHE_FILE = new File("keys.txt");
 
   private static final int CONCURRENCY = 200;
-  private static final int TARGET_QPS = 10000;
+  private static int targetQps;
 
   private static String tableId;
 
   public static void main(String[] args)
       throws IOException, ExecutionException, InterruptedException {
-    if (args.length != 3) {
+    if (args.length != 4) {
       throw new IllegalArgumentException("Wrong number of args.");
     }
     String projectId = args[0];
     String instanceId = args[1];
     tableId = args[2];
+    targetQps = Integer.parseInt(args[3]);
 
     System.out.println(
         String.format("Start benchmarking using project=%s instance=%s table=%s", projectId,
@@ -82,7 +82,7 @@ public class Main {
 
     // Target a steady QPS
     @SuppressWarnings("UnstableApiUsage")
-    RateLimiter rateLimiter = RateLimiter.create(TARGET_QPS);
+    RateLimiter rateLimiter = RateLimiter.create(targetQps);
 
     // Since we are using the blocking variant of readRows, we need some parallelism to hit the
     // target QPS
