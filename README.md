@@ -21,5 +21,5 @@ git --version
 
 # Run the Main benchmark
 ```
-mvn compile exec:java -Dexec.mainClass=org.example.Main -Dexec.args="google.com:cloud-bigtable-dev kongwh-hsbc test-dg-hsbc"
+mvn compile exec:java -Dexec.mainClass=org.example.Main -Dexec.args="google.com:cloud-bigtable-dev kongwh-hsbc test-dg-hsbc 2000"
 ```

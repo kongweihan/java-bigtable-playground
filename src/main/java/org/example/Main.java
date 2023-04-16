@@ -7,6 +7,7 @@ import com.google.api.gax.grpc.ChannelPoolSettings;
 import com.google.api.gax.rpc.ServerStream;
 import com.google.cloud.bigtable.data.v2.BigtableDataClient;
 import com.google.cloud.bigtable.data.v2.BigtableDataSettings;
+import com.google.cloud.bigtable.data.v2.models.Filters;
 import com.google.cloud.bigtable.data.v2.models.KeyOffset;
 import com.google.cloud.bigtable.data.v2.models.Query;
 import com.google.cloud.bigtable.data.v2.models.Row;
@@ -115,7 +116,8 @@ public class Main {
         rateLimiter.acquire();
         int keyI = random.nextInt(rowKeys.size());
         try {
-          client.readRow(tableId, rowKeys.get(keyI));
+          Filters.Filter filter = FILTERS.limit().cellsPerRow(1);
+          client.readRow(tableId, rowKeys.get(keyI), filter);
         } catch (RuntimeException e) {
           if (Thread.interrupted()) {
             System.out.println("Worker interrupted, exiting");
