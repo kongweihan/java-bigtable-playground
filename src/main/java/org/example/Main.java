@@ -1,7 +1,10 @@
+package org.example;
+
 import static com.google.cloud.bigtable.data.v2.models.Filters.FILTERS;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.grpc.ChannelPoolSettings;
+import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.api.gax.rpc.ServerStream;
 import com.google.cloud.bigtable.data.v2.BigtableDataClient;
 import com.google.cloud.bigtable.data.v2.BigtableDataSettings;
@@ -31,21 +34,32 @@ import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
 public class Main {
+
   private static final File KEY_CACHE_FILE = new File("keys.txt");
 
   private static final int CONCURRENCY = 200;
   private static final int TARGET_QPS = 10000;
-  private static final String PROJECT_ID = "google.com:cloud-bigtable-dev";
-  private static final String INSTANCE_ID = "kongwh-df-prod";
-  private static final String TABLE_ID = "imported-1kb-row-1t";
+
+  private static String tableId;
 
   public static void main(String[] args)
       throws IOException, ExecutionException, InterruptedException {
+    if (args.length != 3) {
+      throw new IllegalArgumentException("Wrong number of args.");
+    }
+    String projectId = args[0];
+    String instanceId = args[1];
+    tableId = args[2];
+
+    System.out.println(
+        String.format("Start benchmarking using project=%s instance=%s table=%s", projectId,
+            instanceId, tableId));
+
     BigtableDataSettings.enableBuiltinMetrics();
 
     BigtableDataSettings.Builder settings = BigtableDataSettings.newBuilder()
-        .setProjectId(PROJECT_ID)
-        .setInstanceId(INSTANCE_ID);
+        .setProjectId(projectId)
+        .setInstanceId(instanceId);
 
     settings.stubSettings()
         .setTransportChannelProvider(
@@ -81,6 +95,7 @@ public class Main {
   }
 
   static class Worker implements Runnable {
+
     private final BigtableDataClient client;
     private final List<ByteString> rowKeys;
     @SuppressWarnings("UnstableApiUsage")
@@ -96,11 +111,11 @@ public class Main {
 
     @Override
     public void run() {
-      while(true) {
+      while (true) {
         rateLimiter.acquire();
         int keyI = random.nextInt(rowKeys.size());
         try {
-          client.readRow(TABLE_ID, rowKeys.get(keyI));
+          client.readRow(tableId, rowKeys.get(keyI));
         } catch (RuntimeException e) {
           if (Thread.interrupted()) {
             System.out.println("Worker interrupted, exiting");
@@ -128,7 +143,7 @@ public class Main {
         String line = fin.readLine();
         ImmutableList.Builder<ByteString> builder = ImmutableList.builder();
 
-        while(line != null) {
+        while (line != null) {
           builder.add(ByteString.copyFrom(decoder.decode(line)));
           line = fin.readLine();
         }
@@ -136,10 +151,12 @@ public class Main {
       }
     }
 
-    System.out.println("Cached lookup keys not found, fetching them, this will take a little while");
+    System.out.println(
+        "Cached lookup keys not found, fetching them, this will take a little while");
     // If the keys werent cached, then fetch them from bigtable and cache them to speed up the actual
     // benchmark setup time
     List<ByteString> results = getRandomKeys(client);
+    // List<ByteString> results = getAllKeys(client);
 
     try (FileWriter fout = new FileWriter(KEY_CACHE_FILE)) {
       Encoder encoder = Base64.getEncoder();
@@ -152,20 +169,20 @@ public class Main {
   }
 
   /**
-   * Fetch a sample of keys from across all the tablets.
-   * This os only used for setting up the benchmark.
+   * Fetch a sample of keys from across all the tablets. This os only used for setting up the
+   * benchmark.
    */
   static List<ByteString> getRandomKeys(BigtableDataClient client)
       throws ExecutionException, InterruptedException {
     System.out.println("Sampling keys in the table");
 
     // Fetch the tablet boundaries.
-    List<KeyOffset> keyOffsets = client.sampleRowKeys(TABLE_ID);
+    List<KeyOffset> keyOffsets = client.sampleRowKeys(tableId);
     System.out.println("Found " + keyOffsets.size() + " tablets.");
 
     ByteString startKey = ByteString.EMPTY;
     if (keyOffsets.get(0).getKey().isEmpty()) {
-      keyOffsets = keyOffsets.subList(1, keyOffsets.size()-1);
+      keyOffsets = keyOffsets.subList(1, keyOffsets.size() - 1);
     }
 
     // Limit parallelism of concurrent requests
@@ -175,9 +192,9 @@ public class Main {
 
     // Fetch a sample of 10 keys per tablet
     for (KeyOffset keyOffset : keyOffsets) {
-      System.out.println("startKey=" +startKey + " endKey="+ keyOffset.getKey());
+      System.out.println("startKey=" + startKey + " endKey=" + keyOffset.getKey());
       semaphore.acquire();
-      Query q = Query.create(TABLE_ID)
+      Query q = Query.create(tableId)
           .range(startKey, keyOffset.getKey())
           .filter(
               // randomly sample keys in a tablet
@@ -212,6 +229,30 @@ public class Main {
       System.out.println("key=" + key);
     }
     System.out.println("Done sampling keys in the table");
+    return resultKeys;
+  }
+
+  static List<ByteString> getAllKeys(BigtableDataClient client)
+      throws ExecutionException, InterruptedException {
+    System.out.println("Get all keys in the table");
+
+    // Limit parallelism of concurrent requests
+    Semaphore semaphore = new Semaphore(CONCURRENCY);
+
+    Query q = Query.create(tableId)
+        .filter(FILTERS.chain()
+            .filter(FILTERS.key().sample(0.01))
+            .filter(FILTERS.limit().cellsPerColumn(1))
+            .filter(FILTERS.value().strip()));
+    // .limit(100);
+    ServerStream<Row> stream = client.readRows(q);
+    List<ByteString> resultKeys = new ArrayList<>();
+
+    for (Row row : stream) {
+      resultKeys.add(row.getKey());
+    }
+
+    System.out.println("Done getting all keys in the table");
     return resultKeys;
   }
 }
