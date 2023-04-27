@@ -74,7 +74,7 @@ public class Main {
                         .setMaxChannelCount(20)
                         .setPreemptiveRefreshEnabled(true)
                         .build()
-                ).build()
+                ).setAttemptDirectPath(false).build()
         );
     BigtableDataClient client = BigtableDataClient.create(settings.build());
     System.out.println("Getting row keys");
